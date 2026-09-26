@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, font
 import os
 import subprocess
 import time
@@ -25,6 +25,19 @@ class DuplicateTreeView(ttk.Frame):
         self._build_ui()
 
     def _build_ui(self):
+        # Calculate DPI scale factor
+        try:
+            dpi = self.winfo_fpixels('1i')
+            scale = max(1.0, dpi / 96.0)
+        except Exception:
+            scale = 1.0
+
+        # Configure Treeview styling with modern row height and Segoe UI fonts
+        style = ttk.Style(self)
+        row_height = int(28 * scale)
+        style.configure("Treeview", font=("Segoe UI", 10), rowheight=row_height)
+        style.configure("Treeview.Heading", font=("Segoe UI", 10, "bold"), padding=(6, 4))
+
         columns = ("name", "size", "status", "modified", "path")
         self.tree = ttk.Treeview(self, columns=columns, show="tree headings", selectmode="browse")
 
@@ -35,12 +48,12 @@ class DuplicateTreeView(ttk.Frame):
         self.tree.heading("modified", text="Date Modified", anchor="w")
         self.tree.heading("path", text="Full Path", anchor="w")
 
-        self.tree.column("#0", width=130, stretch=False)
-        self.tree.column("name", width=180)
-        self.tree.column("size", width=90, anchor="e")
-        self.tree.column("status", width=140, anchor="center")
-        self.tree.column("modified", width=150)
-        self.tree.column("path", width=420)
+        self.tree.column("#0", width=int(140 * scale), stretch=False)
+        self.tree.column("name", width=int(180 * scale))
+        self.tree.column("size", width=int(95 * scale), anchor="e")
+        self.tree.column("status", width=int(150 * scale), anchor="center")
+        self.tree.column("modified", width=int(155 * scale))
+        self.tree.column("path", width=int(450 * scale))
 
         # Scrollbars
         vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
@@ -55,9 +68,9 @@ class DuplicateTreeView(ttk.Frame):
         self.columnconfigure(0, weight=1)
 
         # Tags for styling Keep / Toss
-        self.tree.tag_configure("keep", foreground="#0E700E", font=("Segoe UI", 9, "bold"))
-        self.tree.tag_configure("toss", foreground="#C42B1C")
-        self.tree.tag_configure("group_header", font=("Segoe UI", 9, "bold"))
+        self.tree.tag_configure("keep", foreground="#0E700E", font=("Segoe UI", 10, "bold"))
+        self.tree.tag_configure("toss", foreground="#C42B1C", font=("Segoe UI", 10))
+        self.tree.tag_configure("group_header", font=("Segoe UI", 10, "bold"))
 
         # Bindings
         self.tree.bind("<Double-1>", self._on_double_click)
@@ -65,7 +78,7 @@ class DuplicateTreeView(ttk.Frame):
         self.tree.bind("<Button-3>", self._on_right_click)
 
         # Context Menu
-        self.context_menu = tk.Menu(self, tearoff=0)
+        self.context_menu = tk.Menu(self, tearoff=0, font=("Segoe UI", 9))
         self.context_menu.add_command(label="Keep this file (Toss others)", command=self._ctx_keep_this)
         self.context_menu.add_command(label="Toss this file", command=self._ctx_toss_this)
         self.context_menu.add_separator()

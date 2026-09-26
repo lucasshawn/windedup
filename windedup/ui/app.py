@@ -1,10 +1,11 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, font, filedialog, messagebox
 import threading
 import queue
 import os
 from typing import List, Optional
 
+from windedup.ui.dpi import enable_high_dpi_awareness
 from windedup.core.models import DuplicateGroup, ScanProgress
 from windedup.core.scanner import scan_directory
 from windedup.core.rules import (
@@ -19,18 +20,13 @@ from windedup.ui.progress_dialog import ProgressDialog
 
 class WindedupApp(tk.Tk):
     def __init__(self):
+        enable_high_dpi_awareness()
         super().__init__()
         self.title("Windedup - Duplicate File Finder & Deduplicator")
-        self.geometry("1100x700")
-        self.minsize(850, 520)
+        self.geometry("1150x720")
+        self.minsize(900, 560)
 
-        # Apply Windows native ttk theme
-        style = ttk.Style(self)
-        available_themes = style.theme_names()
-        for theme in ("vista", "winnative", "clam", "default"):
-            if theme in available_themes:
-                style.theme_use(theme)
-                break
+        self._configure_styling()
 
         self.groups: List[DuplicateGroup] = []
         self.scan_queue: queue.Queue = queue.Queue()
@@ -39,13 +35,36 @@ class WindedupApp(tk.Tk):
 
         self._build_ui()
 
+    def _configure_styling(self):
+        # Configure crisp modern Segoe UI typography
+        for font_name in ("TkDefaultFont", "TkTextFont", "TkMenuFont"):
+            try:
+                f = font.nametofont(font_name)
+                f.configure(family="Segoe UI", size=10)
+            except Exception:
+                pass
+
+        try:
+            hf = font.nametofont("TkHeadingFont")
+            hf.configure(family="Segoe UI", size=10, weight="bold")
+        except Exception:
+            pass
+
+        # Apply Windows native theme with crisp styling
+        self.style = ttk.Style(self)
+        available_themes = self.style.theme_names()
+        for theme in ("vista", "winnative", "clam", "default"):
+            if theme in available_themes:
+                self.style.theme_use(theme)
+                break
+
     def _build_ui(self):
         # 1. Top Folder Selection Bar
-        top_frame = ttk.LabelFrame(self, text="Target Folder", padding=(12, 8))
-        top_frame.pack(fill="x", padx=12, pady=(10, 5))
+        top_frame = ttk.LabelFrame(self, text=" Target Folder ", padding=(14, 10))
+        top_frame.pack(fill="x", padx=14, pady=(12, 6))
 
-        self.txt_folder = ttk.Entry(top_frame, font=("Segoe UI", 9))
-        self.txt_folder.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.txt_folder = ttk.Entry(top_frame, font=("Segoe UI", 10))
+        self.txt_folder.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
         btn_browse = ttk.Button(top_frame, text="Browse...", command=self._browse_folder)
         btn_browse.pack(side="left", padx=(0, 8))
@@ -54,34 +73,34 @@ class WindedupApp(tk.Tk):
         self.btn_scan.pack(side="left")
 
         # 2. Quick Dedup & Rules Toolbar
-        tools_frame = ttk.Frame(self, padding=(12, 6))
+        tools_frame = ttk.Frame(self, padding=(14, 6))
         tools_frame.pack(fill="x")
 
-        ttk.Label(tools_frame, text="Quick Rules:", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        ttk.Label(tools_frame, text="Quick Rules:", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 10))
         self.btn_rule_newest = ttk.Button(tools_frame, text="Keep Newest", command=self._rule_newest, state="disabled")
-        self.btn_rule_newest.pack(side="left", padx=2)
+        self.btn_rule_newest.pack(side="left", padx=3)
 
         self.btn_rule_oldest = ttk.Button(tools_frame, text="Keep Oldest", command=self._rule_oldest, state="disabled")
-        self.btn_rule_oldest.pack(side="left", padx=2)
+        self.btn_rule_oldest.pack(side="left", padx=3)
 
         self.btn_rule_shortest = ttk.Button(tools_frame, text="Keep Shortest Path", command=self._rule_shortest, state="disabled")
-        self.btn_rule_shortest.pack(side="left", padx=2)
+        self.btn_rule_shortest.pack(side="left", padx=3)
 
         self.btn_rule_folder = ttk.Button(tools_frame, text="Prefer Folder...", command=self._rule_prefer_folder, state="disabled")
-        self.btn_rule_folder.pack(side="left", padx=2)
+        self.btn_rule_folder.pack(side="left", padx=3)
 
-        self.lbl_stats = ttk.Label(tools_frame, text="Select a folder to begin scanning", font=("Segoe UI", 9), foreground="#005A9E")
+        self.lbl_stats = ttk.Label(tools_frame, text="Select a folder to begin scanning", font=("Segoe UI", 10), foreground="#005A9E")
         self.lbl_stats.pack(side="right", padx=5)
 
         # 3. Main Hierarchical Treeview
-        tree_frame = ttk.Frame(self, padding=(12, 5))
+        tree_frame = ttk.Frame(self, padding=(14, 6))
         tree_frame.pack(fill="both", expand=True)
 
         self.tree_view = DuplicateTreeView(tree_frame, on_selection_changed=self._update_stats_display)
         self.tree_view.pack(fill="both", expand=True)
 
         # 4. Bottom Action Bar
-        bottom_frame = ttk.Frame(self, padding=(12, 10))
+        bottom_frame = ttk.Frame(self, padding=(14, 12))
         bottom_frame.pack(fill="x")
 
         self.var_recycle = tk.BooleanVar(value=True)

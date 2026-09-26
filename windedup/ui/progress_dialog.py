@@ -7,7 +7,16 @@ class ProgressDialog(tk.Toplevel):
     def __init__(self, parent: tk.Tk, on_cancel: Optional[Callable[[], None]] = None):
         super().__init__(parent)
         self.title("Scanning for Duplicates...")
-        self.geometry("450x180")
+
+        try:
+            dpi = self.winfo_fpixels('1i')
+            scale = max(1.0, dpi / 96.0)
+        except Exception:
+            scale = 1.0
+
+        dlg_w = int(480 * scale)
+        dlg_h = int(200 * scale)
+        self.geometry(f"{dlg_w}x{dlg_h}")
         self.resizable(False, False)
         self.transient(parent)
         self.grab_set()
@@ -21,38 +30,39 @@ class ProgressDialog(tk.Toplevel):
             parent_y = parent.winfo_rooty()
             parent_w = parent.winfo_width()
             parent_h = parent.winfo_height()
-            dlg_w = 450
-            dlg_h = 180
             pos_x = parent_x + (parent_w - dlg_w) // 2
             pos_y = parent_y + (parent_h - dlg_h) // 2
             self.geometry(f"{dlg_w}x{dlg_h}+{max(0, pos_x)}+{max(0, pos_y)}")
         except Exception:
             pass
 
+        pad_x = int(22 * scale)
+
         # Phase label
         self.lbl_phase = ttk.Label(self, text="Phase 1: Discovering files...", font=("Segoe UI", 10, "bold"))
-        self.lbl_phase.pack(anchor="w", padx=20, pady=(15, 5))
+        self.lbl_phase.pack(anchor="w", padx=pad_x, pady=(int(16 * scale), int(6 * scale)))
 
         # Progress bar (0 - 100)
-        self.progress_bar = ttk.Progressbar(self, orient="horizontal", length=410, mode="determinate", maximum=100.0)
-        self.progress_bar.pack(padx=20, pady=5)
+        bar_len = int(436 * scale)
+        self.progress_bar = ttk.Progressbar(self, orient="horizontal", length=bar_len, mode="determinate", maximum=100.0)
+        self.progress_bar.pack(padx=pad_x, pady=int(6 * scale))
 
         # Percent and file counts
         info_frame = ttk.Frame(self)
-        info_frame.pack(fill="x", padx=20, pady=2)
-        self.lbl_percent = ttk.Label(info_frame, text="0%", font=("Segoe UI", 9, "bold"), foreground="#005A9E")
+        info_frame.pack(fill="x", padx=pad_x, pady=int(3 * scale))
+        self.lbl_percent = ttk.Label(info_frame, text="0%", font=("Segoe UI", 10, "bold"), foreground="#005A9E")
         self.lbl_percent.pack(side="left")
 
         self.lbl_stats = ttk.Label(info_frame, text="Files scanned: 0", font=("Segoe UI", 9))
         self.lbl_stats.pack(side="right")
 
-        # Current file path label (truncated for UI layout)
-        self.lbl_path = ttk.Label(self, text="", font=("Segoe UI", 8), foreground="gray")
-        self.lbl_path.pack(anchor="w", padx=20, pady=(2, 10))
+        # Current file path label
+        self.lbl_path = ttk.Label(self, text="", font=("Segoe UI", 8), foreground="#555555")
+        self.lbl_path.pack(anchor="w", padx=pad_x, pady=(int(3 * scale), int(12 * scale)))
 
         # Cancel button
         self.btn_cancel = ttk.Button(self, text="Cancel", command=self._handle_cancel)
-        self.btn_cancel.pack(pady=(0, 10))
+        self.btn_cancel.pack(pady=(0, int(12 * scale)))
 
         self.protocol("WM_DELETE_WINDOW", self._handle_cancel)
 
@@ -84,6 +94,6 @@ class ProgressDialog(tk.Toplevel):
             self.lbl_percent.config(text="100%")
 
         path_text = p.current_path
-        if len(path_text) > 55:
-            path_text = "..." + path_text[-52:]
+        if len(path_text) > 60:
+            path_text = "..." + path_text[-57:]
         self.lbl_path.config(text=path_text)
