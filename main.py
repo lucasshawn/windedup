@@ -2,12 +2,23 @@
 """
 Windedup - Duplicate File Finder & Deduplicator for Windows
 """
-from windedup.ui.dpi import enable_high_dpi_awareness
+import sys
+import logging
+from windedup.core.logger import install_root_exception_handlers, setup_logging, log_and_show_exception
 
-# Must be set prior to Tk initialization for crisp rendering on high-DPI displays
+# 1. Install logging and global root-level crash handlers
+setup_logging()
+install_root_exception_handlers()
+
+# 2. Enable Windows Per-Monitor V2 high-DPI awareness
+from windedup.ui.dpi import enable_high_dpi_awareness
 enable_high_dpi_awareness()
 
 from windedup.ui.app import main
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        log_and_show_exception(*sys.exc_info(), context="Application Mainloop")
+        sys.exit(1)

@@ -266,10 +266,26 @@ class DuplicateTreeView(ttk.Frame):
         if sel and sel[0] in self._item_to_entry:
             path = self._item_to_entry[sel[0]].path
             folder = os.path.dirname(path)
-            subprocess.run(["explorer", folder])
+            try:
+                if os.path.exists(folder):
+                    os.startfile(folder)
+                else:
+                    subprocess.run(["explorer", folder])
+            except Exception:
+                try:
+                    subprocess.run(["explorer", folder])
+                except Exception:
+                    pass
 
     def _ctx_open_file(self):
         sel = self.tree.selection()
         if sel and sel[0] in self._item_to_entry:
             path = self._item_to_entry[sel[0]].path
-            os.startfile(path)
+            try:
+                os.startfile(path)
+            except Exception as e:
+                from tkinter import messagebox
+                messagebox.showwarning(
+                    "Cannot Open File",
+                    f"Could not open file:\n{path}\n\nReason: {e}"
+                )

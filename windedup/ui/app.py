@@ -1,9 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, font, filedialog, messagebox
-import threading
-import queue
 import os
 import sys
+import queue
+import logging
+import threading
+import traceback
 from typing import List, Optional
 
 from windedup.ui.dpi import enable_high_dpi_awareness
@@ -18,11 +20,16 @@ from windedup.core.rules import (
     apply_keep_all
 )
 from windedup.core.recycle import execute_deduplication, get_completely_discarded_groups
+from windedup.core.logger import log_and_show_exception, get_log_file_path
 from windedup.ui.tree_view import DuplicateTreeView, format_size
 from windedup.ui.progress_dialog import ProgressDialog
 from windedup.ui.delete_dialog import DeleteProgressDialog
 
 class WindedupApp(tk.Tk):
+    def report_callback_exception(self, exc, val, tb):
+        """Root Tkinter callback exception hook to log and show crashes."""
+        log_and_show_exception(exc, val, tb, context="Tkinter Event Callback")
+
     def __init__(self):
         enable_high_dpi_awareness()
         super().__init__()
@@ -179,11 +186,17 @@ class WindedupApp(tk.Tk):
             self.cancel_event.set()
 
     def _scan_worker(self, folder: str, cancel_ev: threading.Event):
-        def on_prog(prog: ScanProgress):
-            self.scan_queue.put(("progress", prog))
+        try:
+            def on_prog(prog: ScanProgress):
+                self.scan_queue.put(("progress", prog))
 
-        groups = scan_directory(folder, progress_callback=on_prog, cancel_event=cancel_ev)
-        self.scan_queue.put(("done", groups))
+            logging.info(f"Scan worker starting for directory: {folder}")
+            groups = scan_directory(folder, progress_callback=on_prog, cancel_event=cancel_ev)
+            logging.info(f"Scan worker completed successfully. Found {len(groups)} duplicate groups.")
+            self.scan_queue.put(("done", groups))
+        except Exception as e:
+            logging.exception(f"Unhandled exception in scan worker for '{folder}': {e}")
+            self.scan_queue.put(("error", (str(e), traceback.format_exc())))
 
     def _check_scan_queue(self):
         try:
@@ -191,6 +204,18 @@ class WindedupApp(tk.Tk):
                 msg_type, data = self.scan_queue.get_nowait()
                 if msg_type == "progress" and self.progress_dialog:
                     self.progress_dialog.update_progress(data)
+                elif msg_type == "error":
+                    err_msg, tb_str = data
+                    if self.progress_dialog:
+                        self.progress_dialog.destroy()
+                        self.progress_dialog = None
+                    self.btn_scan.config(state="normal")
+                    messagebox.showerror(
+                        "Scan Failed",
+                        f"An error occurred while scanning for duplicates:\n\n{err_msg}\n\n"
+                        f"A diagnostic log has been written to:\n{get_log_file_path()}"
+                    )
+                    return
                 elif msg_type == "done":
                     if self.progress_dialog:
                         self.progress_dialog.destroy()
@@ -314,16 +339,22 @@ class WindedupApp(tk.Tk):
             self.delete_cancel_event.set()
 
     def _delete_worker(self, use_recycle_bin: bool, cancel_ev: threading.Event):
-        def on_prog(prog: DeleteProgress):
-            self.delete_queue.put(("progress", prog))
+        try:
+            def on_prog(prog: DeleteProgress):
+                self.delete_queue.put(("progress", prog))
 
-        deleted_count, freed, errors = execute_deduplication(
-            self.groups,
-            use_recycle_bin=use_recycle_bin,
-            progress_callback=on_prog,
-            cancel_event=cancel_ev
-        )
-        self.delete_queue.put(("done", (deleted_count, freed, errors)))
+            logging.info(f"Delete worker starting (use_recycle_bin={use_recycle_bin})")
+            deleted_count, freed, errors = execute_deduplication(
+                self.groups,
+                use_recycle_bin=use_recycle_bin,
+                progress_callback=on_prog,
+                cancel_event=cancel_ev
+            )
+            logging.info(f"Delete worker completed. Removed={deleted_count}, Freed={freed}, Errors={len(errors)}")
+            self.delete_queue.put(("done", (deleted_count, freed, errors)))
+        except Exception as e:
+            logging.exception(f"Unhandled exception in delete worker: {e}")
+            self.delete_queue.put(("error", (str(e), traceback.format_exc())))
 
     def _check_delete_queue(self):
         try:
@@ -331,6 +362,21 @@ class WindedupApp(tk.Tk):
                 msg_type, data = self.delete_queue.get_nowait()
                 if msg_type == "progress" and self.delete_dialog:
                     self.delete_dialog.update_progress(data)
+                elif msg_type == "error":
+                    err_msg, tb_str = data
+                    if self.delete_dialog:
+                        self.delete_dialog.destroy()
+                        self.delete_dialog = None
+                    self.btn_scan.config(state="normal")
+                    if self.groups:
+                        self._set_rule_buttons_state("normal")
+                        self.btn_dedup.config(state="normal")
+                    messagebox.showerror(
+                        "Deduplication Failed",
+                        f"An error occurred during deduplication:\n\n{err_msg}\n\n"
+                        f"A diagnostic log has been written to:\n{get_log_file_path()}"
+                    )
+                    return
                 elif msg_type == "done":
                     deleted_count, freed, errors = data
                     if self.delete_dialog:

@@ -6,6 +6,8 @@ import threading
 from typing import List, Tuple, Callable, Optional
 from windedup.core.models import DuplicateGroup, DeleteProgress
 
+import logging
+
 # Windows SHFileOperation constants
 FO_DELETE = 0x0003
 FOF_ALLOWUNDO = 0x0040
@@ -31,19 +33,26 @@ def _send_to_recycle_bin(path: str) -> bool:
         os.remove(path)
         return True
 
-    # Windows SHFileOperation requires double-null terminated string
-    abs_path = os.path.abspath(path)
-    buffer = abs_path + "\0\0"
+    try:
+        # Windows SHFileOperation requires double-null terminated string
+        abs_path = os.path.abspath(path)
+        buffer = abs_path + "\0\0"
 
-    fileop = SHFILEOPSTRUCTW()
-    fileop.hwnd = 0
-    fileop.wFunc = FO_DELETE
-    fileop.pFrom = buffer
-    fileop.pTo = None
-    fileop.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
+        fileop = SHFILEOPSTRUCTW()
+        fileop.hwnd = 0
+        fileop.wFunc = FO_DELETE
+        fileop.pFrom = buffer
+        fileop.pTo = None
+        fileop.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI
 
-    result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(fileop))
-    return (result == 0 and not fileop.fAnyOperationsAborted)
+        result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(fileop))
+        if result != 0 or fileop.fAnyOperationsAborted:
+            logging.warning(f"SHFileOperationW failed (code={result}, aborted={fileop.fAnyOperationsAborted}) for: {path}")
+            return False
+        return True
+    except Exception as e:
+        logging.error(f"_send_to_recycle_bin unexpected error for {path}: {e}", exc_info=True)
+        return False
 
 def get_completely_discarded_groups(groups: List[DuplicateGroup]) -> List[DuplicateGroup]:
     """Returns all groups where every copy is marked to toss (no keep files)."""
@@ -116,9 +125,11 @@ def execute_deduplication(
                     ))
 
                 try:
+                    logging.info(f"Deleting/recycling file: {e.path} (size={g.size})")
                     if use_recycle_bin and sys.platform == "win32":
                         success = _send_to_recycle_bin(e.path)
                         if not success:
+                            logging.info(f"Fallback to os.remove for: {e.path}")
                             os.remove(e.path)
                     else:
                         os.remove(e.path)
@@ -135,6 +146,7 @@ def execute_deduplication(
                             bytes_freed=bytes_freed
                         ))
                 except Exception as ex:
+                    logging.warning(f"Error removing {e.path}: {ex}", exc_info=True)
                     errors.append((e.path, str(ex)))
                     surviving_entries.append(e)
 

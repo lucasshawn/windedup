@@ -1,5 +1,6 @@
 import os
 import threading
+import logging
 from collections import defaultdict
 from typing import List, Callable, Optional, Dict
 from windedup.core.models import FileEntry, DuplicateGroup, ScanProgress
@@ -18,7 +19,10 @@ def scan_directory(
     Emits continuous numerical percent progress updates.
     """
     if not os.path.isdir(root_dir):
+        logging.warning(f"scan_directory called with non-existent or invalid directory: '{root_dir}'")
         return []
+
+    logging.info(f"Starting duplicate scan for: {root_dir}")
 
     # Phase 1: Fast directory traversal & group by size
     size_to_files: Dict[int, List[FileEntry]] = defaultdict(list)
@@ -29,9 +33,11 @@ def scan_directory(
 
     for dirpath, _, filenames in os.walk(root_dir):
         if cancel_event and cancel_event.is_set():
+            logging.info("Scan cancelled during directory traversal.")
             return []
         for name in filenames:
             if cancel_event and cancel_event.is_set():
+                logging.info("Scan cancelled during directory traversal.")
                 return []
             full_path = os.path.join(dirpath, name)
             try:
@@ -48,12 +54,14 @@ def scan_directory(
                         files_scanned=files_scanned,
                         current_path=dirpath
                     ))
-            except (OSError, PermissionError):
+            except (OSError, PermissionError) as e:
+                logging.debug(f"Cannot access file '{full_path}': {e}")
                 continue
 
     # Filter out files with unique sizes
     candidate_size_groups = [entries for entries in size_to_files.values() if len(entries) >= 2]
     total_candidates = sum(len(entries) for entries in candidate_size_groups)
+    logging.info(f"Phase 1 complete: {files_scanned} files inspected, {len(candidate_size_groups)} candidate size groups ({total_candidates} files).")
 
     if total_candidates == 0:
         if progress_callback:
@@ -91,16 +99,19 @@ def scan_directory(
     # Allocation: 30% - 100% progress
     candidate_partial_groups = [entries for entries in partial_to_files.values() if len(entries) >= 2]
     full_candidates_total = sum(len(entries) for entries in candidate_partial_groups)
+    logging.info(f"Phase 2 complete: {len(candidate_partial_groups)} partial collision groups ({full_candidates_total} files).")
 
     full_to_files: Dict[tuple, List[FileEntry]] = defaultdict(list)
     full_processed = 0
 
     for entries in candidate_partial_groups:
         if cancel_event and cancel_event.is_set():
+            logging.info("Scan cancelled during full hashing.")
             return []
         size = entries[0].size
         for entry in entries:
             if cancel_event and cancel_event.is_set():
+                logging.info("Scan cancelled during full hashing.")
                 return []
             f_hash = compute_full_hash(entry.path, cancel_event=cancel_event)
             full_processed += 1
@@ -134,6 +145,7 @@ def scan_directory(
             duplicate_groups.append(group)
             group_idx += 1
 
+    logging.info(f"Scan complete: found {len(duplicate_groups)} duplicate groups across {files_scanned} files.")
     if progress_callback:
         progress_callback(ScanProgress(phase="complete", percent=100.0, files_scanned=files_scanned, candidate_count=len(duplicate_groups)))
 
