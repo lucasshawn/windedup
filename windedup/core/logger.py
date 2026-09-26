@@ -1,13 +1,16 @@
 import os
 import sys
+import json
 import logging
 from logging.handlers import RotatingFileHandler
 import threading
 import traceback
-from typing import Optional
+from datetime import datetime
+from typing import Optional, Dict, Any
 
-# Global log file path
+# Global log file and marker paths
 LOG_FILE_PATH: str = ""
+CRASH_MARKER_PATH: str = ""
 
 def get_log_file_path() -> str:
     global LOG_FILE_PATH
@@ -28,6 +31,82 @@ def get_log_file_path() -> str:
         LOG_FILE_PATH = os.path.abspath("windedup.log")
 
     return LOG_FILE_PATH
+
+def get_crash_marker_path() -> str:
+    global CRASH_MARKER_PATH
+    if CRASH_MARKER_PATH:
+        return CRASH_MARKER_PATH
+
+    log_path = get_log_file_path()
+    log_dir = os.path.dirname(log_path)
+    CRASH_MARKER_PATH = os.path.join(log_dir, "crash.marker")
+    return CRASH_MARKER_PATH
+
+def write_crash_marker(
+    exc_type,
+    exc_value,
+    exc_traceback,
+    context: str = "Unhandled Exception"
+) -> None:
+    """Writes a persistent marker file so next startup can detect and report the crash."""
+    try:
+        marker_path = get_crash_marker_path()
+        tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        tb_text = "".join(tb_lines)
+
+        data = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "context": context,
+            "error_type": exc_type.__name__ if exc_type else "Exception",
+            "error_message": str(exc_value),
+            "traceback": tb_text,
+            "log_file": get_log_file_path(),
+            "python_version": sys.version,
+            "platform": sys.platform
+        }
+
+        with open(marker_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        logging.error(f"Failed to write crash marker file: {e}")
+
+def has_previous_crash() -> Optional[Dict[str, Any]]:
+    """Checks whether a crash marker exists from a previous run and returns its data."""
+    try:
+        marker_path = get_crash_marker_path()
+        if os.path.exists(marker_path):
+            with open(marker_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception as e:
+        logging.error(f"Failed to read crash marker file: {e}")
+    return None
+
+def clear_previous_crash() -> None:
+    """Removes the crash marker file once acknowledged or dismissed by user."""
+    try:
+        marker_path = get_crash_marker_path()
+        if os.path.exists(marker_path):
+            os.remove(marker_path)
+    except Exception as e:
+        logging.error(f"Failed to remove crash marker file: {e}")
+
+def get_crash_report_text(crash_info: Dict[str, Any]) -> str:
+    """Formats full crash diagnostics for developer submission or clipboard."""
+    return (
+        f"Windedup Crash Report\n"
+        f"Developer: lucas_shawn@hotmail.com\n"
+        f"--------------------------------------------------\n"
+        f"Timestamp:      {crash_info.get('timestamp', 'Unknown')}\n"
+        f"Context:        {crash_info.get('context', 'Unknown')}\n"
+        f"Error Type:     {crash_info.get('error_type', 'Exception')}\n"
+        f"Error Message:  {crash_info.get('error_message', 'No details')}\n"
+        f"Platform:       {crash_info.get('platform', sys.platform)}\n"
+        f"Python Version: {crash_info.get('python_version', sys.version)}\n"
+        f"Log File Path:  {crash_info.get('log_file', get_log_file_path())}\n"
+        f"--------------------------------------------------\n"
+        f"Traceback:\n"
+        f"{crash_info.get('traceback', 'No traceback available')}\n"
+    )
 
 _LOGGING_INITIALIZED: bool = False
 
@@ -97,6 +176,7 @@ def log_and_show_exception(
     tb_text = "".join(tb_lines)
 
     logger.critical(f"FATAL ERROR in {context}:\n{tb_text}")
+    write_crash_marker(exc_type, exc_value, exc_traceback, context=context)
 
     if show_dialog:
         try:

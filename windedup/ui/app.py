@@ -21,6 +21,7 @@ from windedup.core.rules import (
 )
 from windedup.core.recycle import execute_deduplication, get_completely_discarded_groups
 from windedup.core.logger import log_and_show_exception, get_log_file_path
+from windedup.core.filter import parse_masks, filter_duplicate_groups
 from windedup.ui.tree_view import DuplicateTreeView, format_size
 from windedup.ui.progress_dialog import ProgressDialog
 from windedup.ui.delete_dialog import DeleteProgressDialog
@@ -40,7 +41,10 @@ class WindedupApp(tk.Tk):
         self._set_app_icon()
         self._configure_styling()
 
-        self.groups: List[DuplicateGroup] = []
+        self.all_groups: List[DuplicateGroup] = []
+        self.displayed_groups: List[DuplicateGroup] = []
+        self._filter_debounce_id: Optional[str] = None
+
         self.scan_queue: queue.Queue = queue.Queue()
         self.delete_queue: queue.Queue = queue.Queue()
         self.cancel_event: Optional[threading.Event] = None
@@ -49,6 +53,24 @@ class WindedupApp(tk.Tk):
         self.delete_dialog: Optional[DeleteProgressDialog] = None
 
         self._build_ui()
+        self._check_previous_crash()
+
+    @property
+    def groups(self) -> List[DuplicateGroup]:
+        """Returns the currently active / filtered groups."""
+        return self.displayed_groups
+
+    @groups.setter
+    def groups(self, value: List[DuplicateGroup]):
+        self.displayed_groups = value
+
+    def _check_previous_crash(self):
+        """Detects if previous session crashed and displays the reporter dialog."""
+        from windedup.core.logger import has_previous_crash
+        crash_info = has_previous_crash()
+        if crash_info:
+            from windedup.ui.crash_dialog import CrashReportDialog
+            self.after(200, lambda: CrashReportDialog(self, crash_info))
 
     def _set_app_icon(self):
         base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -103,7 +125,35 @@ class WindedupApp(tk.Tk):
         self.btn_scan = ttk.Button(top_frame, text="Scan for Duplicates", command=self._start_scan)
         self.btn_scan.pack(side="left")
 
-        # 2. Quick Dedup & Rules Toolbar
+        # 2. Path & Name Filter Masks (Real-Time)
+        filter_frame = ttk.LabelFrame(self, text=" Path & Name Filters (Semicolon-Separated, Real-Time) ", padding=(14, 8))
+        filter_frame.pack(fill="x", padx=14, pady=(0, 6))
+
+        filter_grid = ttk.Frame(filter_frame)
+        filter_grid.pack(fill="x")
+
+        lbl_inc = ttk.Label(filter_grid, text="Include:", font=("Segoe UI", 9, "bold"))
+        lbl_inc.grid(row=0, column=0, sticky="w", padx=(0, 6), pady=2)
+
+        self.txt_include = ttk.Entry(filter_grid, font=("Segoe UI", 9))
+        self.txt_include.grid(row=0, column=1, sticky="ew", padx=(0, 16), pady=2)
+
+        lbl_exc = ttk.Label(filter_grid, text="Exclude:", font=("Segoe UI", 9, "bold"))
+        lbl_exc.grid(row=0, column=2, sticky="w", padx=(0, 6), pady=2)
+
+        self.txt_exclude = ttk.Entry(filter_grid, font=("Segoe UI", 9))
+        self.txt_exclude.grid(row=0, column=3, sticky="ew", padx=(0, 10), pady=2)
+
+        self.btn_clear_filters = ttk.Button(filter_grid, text="Clear Filters", command=self._clear_filters)
+        self.btn_clear_filters.grid(row=0, column=4, sticky="e", pady=2)
+
+        filter_grid.columnconfigure(1, weight=1)
+        filter_grid.columnconfigure(3, weight=1)
+
+        self.txt_include.bind("<KeyRelease>", self._on_filter_changed)
+        self.txt_exclude.bind("<KeyRelease>", self._on_filter_changed)
+
+        # 3. Quick Dedup & Rules Toolbar
         tools_frame = ttk.Frame(self, padding=(14, 6))
         tools_frame.pack(fill="x")
 
@@ -221,24 +271,62 @@ class WindedupApp(tk.Tk):
                         self.progress_dialog.destroy()
                         self.progress_dialog = None
                     self.btn_scan.config(state="normal")
-                    self.groups = data
-                    self.tree_view.populate(self.groups)
+                    self.all_groups = data
+                    self._apply_filter()
 
-                    if self.groups:
-                        self._set_rule_buttons_state("normal")
-                        self.btn_dedup.config(state="normal")
-                    else:
-                        self._set_rule_buttons_state("disabled")
-                        self.btn_dedup.config(state="disabled")
+                    if not self.all_groups:
                         if self.cancel_event and self.cancel_event.is_set():
                             messagebox.showinfo("Scan Cancelled", "Scan was cancelled by the user.")
                         else:
                             messagebox.showinfo("Scan Complete", "No duplicate files found in the selected folder!")
+                    elif not self.displayed_groups:
+                        messagebox.showinfo(
+                            "Scan Complete",
+                            f"Found {len(self.all_groups)} duplicate group(s), but none match the active include/exclude filters.\n\n"
+                            f"Clear or adjust your filters to view them."
+                        )
                     return
         except queue.Empty:
             pass
 
         self.after(50, self._check_scan_queue)
+
+    def _on_filter_changed(self, event=None):
+        """Debounces real-time filter updates so fast typing remains responsive."""
+        if self._filter_debounce_id:
+            self.after_cancel(self._filter_debounce_id)
+        self._filter_debounce_id = self.after(150, self._apply_filter)
+
+    def _clear_filters(self):
+        """Clears both include and exclude filters and refreshes the view."""
+        self.txt_include.delete(0, tk.END)
+        self.txt_exclude.delete(0, tk.END)
+        self._apply_filter()
+
+    def _apply_filter(self):
+        """Filters in-memory groups according to active include/exclude masks."""
+        self._filter_debounce_id = None
+        inc_str = self.txt_include.get().strip() if hasattr(self, "txt_include") else ""
+        exc_str = self.txt_exclude.get().strip() if hasattr(self, "txt_exclude") else ""
+
+        inc_masks = parse_masks(inc_str)
+        exc_masks = parse_masks(exc_str)
+
+        if not inc_masks and not exc_masks:
+            self.displayed_groups = list(self.all_groups)
+        else:
+            self.displayed_groups = filter_duplicate_groups(
+                self.all_groups,
+                include_masks=inc_masks,
+                exclude_masks=exc_masks
+            )
+
+        self.tree_view.populate(self.displayed_groups)
+        self._update_stats_display()
+
+        has_items = len(self.displayed_groups) > 0
+        self._set_rule_buttons_state("normal" if has_items else "disabled")
+        self.btn_dedup.config(state="normal" if has_items else "disabled")
 
     def _set_rule_buttons_state(self, state: str):
         self.btn_rule_newest.config(state=state)
@@ -249,18 +337,25 @@ class WindedupApp(tk.Tk):
         self.btn_keep_all.config(state=state)
 
     def _update_stats_display(self):
-        total_groups = len(self.groups)
-        total_toss = sum(g.toss_count for g in self.groups)
-        total_reclaim = sum(g.reclaimable_bytes for g in self.groups)
+        total_groups = len(self.displayed_groups)
+        total_toss = sum(g.toss_count for g in self.displayed_groups)
+        total_reclaim = sum(g.reclaimable_bytes for g in self.displayed_groups)
 
-        completely_discarded = len(get_completely_discarded_groups(self.groups))
+        completely_discarded = len(get_completely_discarded_groups(self.displayed_groups))
         extra_note = f" (⚠️ {completely_discarded} group(s) marked for 100% deletion)" if completely_discarded > 0 else ""
 
+        filter_note = ""
+        if len(self.all_groups) != len(self.displayed_groups):
+            filter_note = f" (filtered from {len(self.all_groups)} total)"
+
         if total_groups == 0:
-            self.lbl_stats.config(text="No duplicate files loaded")
+            if self.all_groups:
+                self.lbl_stats.config(text=f"0 duplicate groups match active filter ({len(self.all_groups)} total loaded)")
+            else:
+                self.lbl_stats.config(text="No duplicate files loaded")
         else:
             self.lbl_stats.config(
-                text=f"Duplicates: {total_groups} groups | Marked to toss: {total_toss} files ({format_size(total_reclaim)} reclaimable){extra_note}"
+                text=f"Duplicates: {total_groups} groups{filter_note} | Marked to toss: {total_toss} files ({format_size(total_reclaim)} reclaimable){extra_note}"
             )
 
     def _rule_newest(self):
@@ -387,15 +482,8 @@ class WindedupApp(tk.Tk):
                     self.btn_scan.config(state="normal")
 
                     # Keep only groups that still have 2 or more files (or clear empty ones)
-                    self.groups = [g for g in self.groups if len(g.entries) >= 2]
-                    self.tree_view.populate(self.groups)
-
-                    if self.groups:
-                        self._set_rule_buttons_state("normal")
-                        self.btn_dedup.config(state="normal")
-                    else:
-                        self._set_rule_buttons_state("disabled")
-                        self.btn_dedup.config(state="disabled")
+                    self.all_groups = [g for g in self.all_groups if len(g.entries) >= 2]
+                    self._apply_filter()
 
                     err_msg = ""
                     if errors:

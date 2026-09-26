@@ -6,7 +6,7 @@ import os
 class FileEntry:
     path: str
     size: int
-    mtime: float
+    mtime: float = 0.0
     hash: Optional[str] = None
     is_keep: bool = True
 
