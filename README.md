@@ -25,6 +25,10 @@
   - **Check All (Toss All)** & **Uncheck All (Keep All)**.
 - **Total Group Removal**:
   - If you don't want any copies of a file, check the entire group to toss all copies. The confirmation dialog will explicitly note any groups being 100% removed.
+- **Real-Time Deletion Progress Meter**:
+  - Displays a live percentage bar, active file path being deleted, and dynamic reclaimed space counter during deduplication, with cancel support.
+- **Custom Axe Icon**:
+  - Embedded multi-resolution woodsman axe icon for the desktop executable and window titlebar.
 - **Windows Recycle Bin Integration**:
   - Discarded files are moved directly to the Windows Recycle Bin using native Windows Shell APIs (`ctypes.windll.shell32.SHFileOperationW`) so they can be easily restored if needed.
 
