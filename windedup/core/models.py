@@ -42,3 +42,11 @@ class ScanProgress:
     files_scanned: int
     current_path: str = ""
     candidate_count: int = 0
+
+@dataclass
+class DeleteProgress:
+    current: int
+    total: int
+    percent: float  # 0.0 to 100.0
+    current_path: str = ""
+    bytes_freed: int = 0

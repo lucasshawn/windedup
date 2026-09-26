@@ -6,7 +6,7 @@ import os
 from typing import List, Optional
 
 from windedup.ui.dpi import enable_high_dpi_awareness
-from windedup.core.models import DuplicateGroup, ScanProgress
+from windedup.core.models import DuplicateGroup, ScanProgress, DeleteProgress
 from windedup.core.scanner import scan_directory
 from windedup.core.rules import (
     apply_keep_newest,
@@ -19,6 +19,7 @@ from windedup.core.rules import (
 from windedup.core.recycle import execute_deduplication, get_completely_discarded_groups
 from windedup.ui.tree_view import DuplicateTreeView, format_size
 from windedup.ui.progress_dialog import ProgressDialog
+from windedup.ui.delete_dialog import DeleteProgressDialog
 
 class WindedupApp(tk.Tk):
     def __init__(self):
@@ -32,8 +33,11 @@ class WindedupApp(tk.Tk):
 
         self.groups: List[DuplicateGroup] = []
         self.scan_queue: queue.Queue = queue.Queue()
+        self.delete_queue: queue.Queue = queue.Queue()
         self.cancel_event: Optional[threading.Event] = None
+        self.delete_cancel_event: Optional[threading.Event] = None
         self.progress_dialog: Optional[ProgressDialog] = None
+        self.delete_dialog: Optional[DeleteProgressDialog] = None
 
         self._build_ui()
 
@@ -269,23 +273,81 @@ class WindedupApp(tk.Tk):
         if not confirm:
             return
 
+        # Disable UI controls during deletion
+        self.btn_dedup.config(state="disabled")
+        self.btn_scan.config(state="disabled")
+        self._set_rule_buttons_state("disabled")
+
+        self.delete_cancel_event = threading.Event()
+        self.delete_dialog = DeleteProgressDialog(self, on_cancel=self._cancel_delete)
+
+        worker = threading.Thread(
+            target=self._delete_worker,
+            args=(recycle_enabled, self.delete_cancel_event),
+            daemon=True
+        )
+        worker.start()
+        self.after(30, self._check_delete_queue)
+
+    def _cancel_delete(self):
+        if self.delete_cancel_event:
+            self.delete_cancel_event.set()
+
+    def _delete_worker(self, use_recycle_bin: bool, cancel_ev: threading.Event):
+        def on_prog(prog: DeleteProgress):
+            self.delete_queue.put(("progress", prog))
+
+        deleted_count, freed, errors = execute_deduplication(
+            self.groups,
+            use_recycle_bin=use_recycle_bin,
+            progress_callback=on_prog,
+            cancel_event=cancel_ev
+        )
+        self.delete_queue.put(("done", (deleted_count, freed, errors)))
+
+    def _check_delete_queue(self):
         try:
-            deleted_count, freed, errors = execute_deduplication(self.groups, use_recycle_bin=recycle_enabled)
+            while not self.delete_queue.empty():
+                msg_type, data = self.delete_queue.get_nowait()
+                if msg_type == "progress" and self.delete_dialog:
+                    self.delete_dialog.update_progress(data)
+                elif msg_type == "done":
+                    deleted_count, freed, errors = data
+                    if self.delete_dialog:
+                        self.delete_dialog.destroy()
+                        self.delete_dialog = None
 
-            # Keep only groups that still have 2 or more files (or clear empty ones)
-            self.groups = [g for g in self.groups if len(g.entries) >= 2]
-            self.tree_view.populate(self.groups)
+                    # Re-enable controls
+                    self.btn_scan.config(state="normal")
 
-            err_msg = ""
-            if errors:
-                err_msg = f"\n\nEncountered {len(errors)} error(s) during removal:\n" + "\n".join(f"{p}: {e}" for p, e in errors[:5])
+                    # Keep only groups that still have 2 or more files (or clear empty ones)
+                    self.groups = [g for g in self.groups if len(g.entries) >= 2]
+                    self.tree_view.populate(self.groups)
 
-            messagebox.showinfo(
-                "Deduplication Complete",
-                f"Successfully removed {deleted_count} file(s), reclaiming {format_size(freed)}!{err_msg}"
-            )
-        except Exception as ex:
-            messagebox.showerror("Error", f"Deduplication failed: {str(ex)}")
+                    if self.groups:
+                        self._set_rule_buttons_state("normal")
+                        self.btn_dedup.config(state="normal")
+                    else:
+                        self._set_rule_buttons_state("disabled")
+                        self.btn_dedup.config(state="disabled")
+
+                    err_msg = ""
+                    if errors:
+                        err_msg = f"\n\nEncountered {len(errors)} error(s) during removal:\n" + "\n".join(f"{p}: {e}" for p, e in errors[:5])
+
+                    was_cancelled = self.delete_cancel_event and self.delete_cancel_event.is_set()
+                    status_title = "Deduplication Stopped" if was_cancelled else "Deduplication Complete"
+                    cancel_note = " (Cancelled early by user)" if was_cancelled else ""
+
+                    messagebox.showinfo(
+                        status_title,
+                        f"Successfully removed {deleted_count} file(s), reclaiming {format_size(freed)}!{cancel_note}{err_msg}"
+                    )
+                    return
+        except queue.Empty:
+            pass
+
+        self.after(30, self._check_delete_queue)
 
 def main():
     app = WindedupApp()

@@ -2,6 +2,7 @@
 import unittest
 import tempfile
 import os
+import threading
 from windedup.core.models import FileEntry, DuplicateGroup
 from windedup.core.recycle import get_completely_discarded_groups, execute_deduplication
 
@@ -70,6 +71,58 @@ class TestRecycle(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertTrue(len(errors) > 0)
         self.assertIn("None of the designated KEEP files exist", errors[0][1])
+
+    def test_emits_progress_events(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            p1 = os.path.join(tmp.name, "k.txt")
+            p2 = os.path.join(tmp.name, "t.txt")
+            with open(p1, "wb") as f: f.write(b"data")
+            with open(p2, "wb") as f: f.write(b"data")
+
+            f1 = FileEntry(path=p1, size=4, mtime=0, is_keep=True)
+            f2 = FileEntry(path=p2, size=4, mtime=0, is_keep=False)
+            group = DuplicateGroup(group_id="g1", hash="h", size=4, entries=[f1, f2])
+
+            progresses = []
+            execute_deduplication(
+                [group],
+                use_recycle_bin=False,
+                progress_callback=lambda p: progresses.append(p)
+            )
+
+            self.assertTrue(len(progresses) >= 2)
+            self.assertEqual(progresses[0].percent, 0.0)
+            self.assertEqual(progresses[-1].percent, 100.0)
+            self.assertTrue(any(p.current_path == p2 for p in progresses))
+        finally:
+            tmp.cleanup()
+
+    def test_supports_cancellation(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            p1 = os.path.join(tmp.name, "k.txt")
+            p2 = os.path.join(tmp.name, "t.txt")
+            with open(p1, "wb") as f: f.write(b"data")
+            with open(p2, "wb") as f: f.write(b"data")
+
+            f1 = FileEntry(path=p1, size=4, mtime=0, is_keep=True)
+            f2 = FileEntry(path=p2, size=4, mtime=0, is_keep=False)
+            group = DuplicateGroup(group_id="g1", hash="h", size=4, entries=[f1, f2])
+
+            cancel_ev = threading.Event()
+            cancel_ev.set()  # Cancel upfront
+
+            count, freed, errors = execute_deduplication(
+                [group],
+                use_recycle_bin=False,
+                cancel_event=cancel_ev
+            )
+
+            self.assertEqual(count, 0)
+            self.assertTrue(os.path.exists(p2))
+        finally:
+            tmp.cleanup()
 
 if __name__ == '__main__':
     unittest.main()
