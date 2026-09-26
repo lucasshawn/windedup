@@ -3,6 +3,7 @@ from tkinter import ttk, font, filedialog, messagebox
 import threading
 import queue
 import os
+import sys
 from typing import List, Optional
 
 from windedup.ui.dpi import enable_high_dpi_awareness
@@ -29,6 +30,7 @@ class WindedupApp(tk.Tk):
         self.geometry("1180x740")
         self.minsize(920, 580)
 
+        self._set_app_icon()
         self._configure_styling()
 
         self.groups: List[DuplicateGroup] = []
@@ -40,6 +42,24 @@ class WindedupApp(tk.Tk):
         self.delete_dialog: Optional[DeleteProgressDialog] = None
 
         self._build_ui()
+
+    def _set_app_icon(self):
+        base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        ico_path = os.path.join(base_dir, "assets", "icon.ico")
+        png_path = os.path.join(base_dir, "assets", "icon.png")
+
+        if os.path.exists(ico_path):
+            try:
+                self.iconbitmap(ico_path)
+            except Exception:
+                pass
+
+        if os.path.exists(png_path):
+            try:
+                self._icon_img = tk.PhotoImage(file=png_path)
+                self.iconphoto(True, self._icon_img)
+            except Exception:
+                pass
 
     def _configure_styling(self):
         for font_name in ("TkDefaultFont", "TkTextFont", "TkMenuFont"):
