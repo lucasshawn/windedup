@@ -12,9 +12,11 @@ from windedup.core.rules import (
     apply_keep_newest,
     apply_keep_oldest,
     apply_keep_shortest_path,
-    apply_prefer_folder
+    apply_prefer_folder,
+    apply_toss_all,
+    apply_keep_all
 )
-from windedup.core.recycle import execute_deduplication, validate_safety_invariants
+from windedup.core.recycle import execute_deduplication, get_completely_discarded_groups
 from windedup.ui.tree_view import DuplicateTreeView, format_size
 from windedup.ui.progress_dialog import ProgressDialog
 
@@ -23,8 +25,8 @@ class WindedupApp(tk.Tk):
         enable_high_dpi_awareness()
         super().__init__()
         self.title("Windedup - Duplicate File Finder & Deduplicator")
-        self.geometry("1150x720")
-        self.minsize(900, 560)
+        self.geometry("1180x740")
+        self.minsize(920, 580)
 
         self._configure_styling()
 
@@ -36,7 +38,6 @@ class WindedupApp(tk.Tk):
         self._build_ui()
 
     def _configure_styling(self):
-        # Configure crisp modern Segoe UI typography
         for font_name in ("TkDefaultFont", "TkTextFont", "TkMenuFont"):
             try:
                 f = font.nametofont(font_name)
@@ -50,7 +51,6 @@ class WindedupApp(tk.Tk):
         except Exception:
             pass
 
-        # Apply Windows native theme with crisp styling
         self.style = ttk.Style(self)
         available_themes = self.style.theme_names()
         for theme in ("vista", "winnative", "clam", "default"):
@@ -76,23 +76,31 @@ class WindedupApp(tk.Tk):
         tools_frame = ttk.Frame(self, padding=(14, 6))
         tools_frame.pack(fill="x")
 
-        ttk.Label(tools_frame, text="Quick Rules:", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 10))
+        ttk.Label(tools_frame, text="Quick Filters:", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 8))
         self.btn_rule_newest = ttk.Button(tools_frame, text="Keep Newest", command=self._rule_newest, state="disabled")
-        self.btn_rule_newest.pack(side="left", padx=3)
+        self.btn_rule_newest.pack(side="left", padx=2)
 
         self.btn_rule_oldest = ttk.Button(tools_frame, text="Keep Oldest", command=self._rule_oldest, state="disabled")
-        self.btn_rule_oldest.pack(side="left", padx=3)
+        self.btn_rule_oldest.pack(side="left", padx=2)
 
         self.btn_rule_shortest = ttk.Button(tools_frame, text="Keep Shortest Path", command=self._rule_shortest, state="disabled")
-        self.btn_rule_shortest.pack(side="left", padx=3)
+        self.btn_rule_shortest.pack(side="left", padx=2)
 
         self.btn_rule_folder = ttk.Button(tools_frame, text="Prefer Folder...", command=self._rule_prefer_folder, state="disabled")
-        self.btn_rule_folder.pack(side="left", padx=3)
+        self.btn_rule_folder.pack(side="left", padx=2)
+
+        ttk.Separator(tools_frame, orient="vertical").pack(side="left", fill="y", padx=8, pady=2)
+
+        self.btn_toss_all = ttk.Button(tools_frame, text="Check All (Toss All)", command=self._rule_toss_all, state="disabled")
+        self.btn_toss_all.pack(side="left", padx=2)
+
+        self.btn_keep_all = ttk.Button(tools_frame, text="Uncheck All (Keep All)", command=self._rule_keep_all, state="disabled")
+        self.btn_keep_all.pack(side="left", padx=2)
 
         self.lbl_stats = ttk.Label(tools_frame, text="Select a folder to begin scanning", font=("Segoe UI", 10), foreground="#005A9E")
         self.lbl_stats.pack(side="right", padx=5)
 
-        # 3. Main Hierarchical Treeview
+        # 3. Main Hierarchical Treeview with Checkboxes
         tree_frame = ttk.Frame(self, padding=(14, 6))
         tree_frame.pack(fill="both", expand=True)
 
@@ -188,17 +196,22 @@ class WindedupApp(tk.Tk):
         self.btn_rule_oldest.config(state=state)
         self.btn_rule_shortest.config(state=state)
         self.btn_rule_folder.config(state=state)
+        self.btn_toss_all.config(state=state)
+        self.btn_keep_all.config(state=state)
 
     def _update_stats_display(self):
         total_groups = len(self.groups)
         total_toss = sum(g.toss_count for g in self.groups)
         total_reclaim = sum(g.reclaimable_bytes for g in self.groups)
 
+        completely_discarded = len(get_completely_discarded_groups(self.groups))
+        extra_note = f" (⚠️ {completely_discarded} group(s) marked for 100% deletion)" if completely_discarded > 0 else ""
+
         if total_groups == 0:
             self.lbl_stats.config(text="No duplicate files loaded")
         else:
             self.lbl_stats.config(
-                text=f"Duplicates: {total_groups} groups | Marked to toss: {total_toss} files ({format_size(total_reclaim)} reclaimable)"
+                text=f"Duplicates: {total_groups} groups | Marked to toss: {total_toss} files ({format_size(total_reclaim)} reclaimable){extra_note}"
             )
 
     def _rule_newest(self):
@@ -219,33 +232,39 @@ class WindedupApp(tk.Tk):
             apply_prefer_folder(self.groups, folder)
             self.tree_view.refresh_views()
 
-    def _execute_dedup(self):
-        validation_errors = validate_safety_invariants(self.groups)
-        if validation_errors:
-            messagebox.showerror(
-                "Cannot Proceed with Dedup",
-                "Safety Invariant Violation:\n\n" + "\n".join(validation_errors[:5]) +
-                (f"\n... and {len(validation_errors) - 5} more" if len(validation_errors) > 5 else "")
-            )
-            return
+    def _rule_toss_all(self):
+        apply_toss_all(self.groups)
+        self.tree_view.refresh_views()
 
+    def _rule_keep_all(self):
+        apply_keep_all(self.groups)
+        self.tree_view.refresh_views()
+
+    def _execute_dedup(self):
         total_toss = sum(g.toss_count for g in self.groups)
         total_reclaim = sum(g.reclaimable_bytes for g in self.groups)
         if total_toss == 0:
-            messagebox.showinfo("No Files to Dedup", "No files are currently marked as [TOSS].")
+            messagebox.showinfo("No Files to Dedup", "No files are currently checked as [TOSS].")
             return
 
         recycle_enabled = self.var_recycle.get()
         target_desc = "Windows Recycle Bin (Restorable)" if recycle_enabled else "PERMANENT DELETION (Irreversible!)"
+
+        discarded_groups = get_completely_discarded_groups(self.groups)
+        warn_clause = ""
+        if discarded_groups:
+            warn_clause = (
+                f"\n\n⚠️ Notice: {len(discarded_groups)} duplicate group(s) have ALL copies checked to toss "
+                f"and will have zero surviving copies left on your drive!"
+            )
 
         confirm = messagebox.askyesno(
             "Confirm Deduplication",
             f"Are you sure you want to deduplicate now?\n\n"
             f"• Files to remove: {total_toss}\n"
             f"• Disk space to recover: {format_size(total_reclaim)}\n"
-            f"• Destination: {target_desc}\n\n"
-            f"Safety check passed: At least one original copy will be kept for every group.",
-            icon="warning" if not recycle_enabled else "question"
+            f"• Destination: {target_desc}{warn_clause}",
+            icon="warning" if (not recycle_enabled or discarded_groups) else "question"
         )
         if not confirm:
             return
@@ -253,7 +272,7 @@ class WindedupApp(tk.Tk):
         try:
             deleted_count, freed, errors = execute_deduplication(self.groups, use_recycle_bin=recycle_enabled)
 
-            # Keep only groups that still have 2 or more files
+            # Keep only groups that still have 2 or more files (or clear empty ones)
             self.groups = [g for g in self.groups if len(g.entries) >= 2]
             self.tree_view.populate(self.groups)
 

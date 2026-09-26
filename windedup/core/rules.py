@@ -39,3 +39,15 @@ def apply_prefer_folder(groups: List[DuplicateGroup], folder_prefix: str) -> Non
         chosen = matches[0] if matches else g.entries[0]
         for e in g.entries:
             e.is_keep = (e == chosen)
+
+def apply_toss_all(groups: List[DuplicateGroup]) -> None:
+    """Marks all files in all groups as TOSS (checked for removal)."""
+    for g in groups:
+        for e in g.entries:
+            e.is_keep = False
+
+def apply_keep_all(groups: List[DuplicateGroup]) -> None:
+    """Marks all files in all groups as KEEP (uncheck all)."""
+    for g in groups:
+        for e in g.entries:
+            e.is_keep = True

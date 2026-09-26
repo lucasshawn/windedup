@@ -44,13 +44,13 @@ def _send_to_recycle_bin(path: str) -> bool:
     result = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(fileop))
     return (result == 0 and not fileop.fAnyOperationsAborted)
 
+def get_completely_discarded_groups(groups: List[DuplicateGroup]) -> List[DuplicateGroup]:
+    """Returns all groups where every copy is marked to toss (no keep files)."""
+    return [g for g in groups if g.keep_count == 0 and len(g.entries) > 0]
+
 def validate_safety_invariants(groups: List[DuplicateGroup]) -> List[str]:
-    """Ensures every duplicate group retains at least 1 KEEP file."""
-    errors = []
-    for g in groups:
-        if g.keep_count == 0:
-            errors.append(f"Group '{g.filename}' has no designated file to KEEP. At least 1 file must be kept.")
-    return errors
+    """Legacy helper: returns empty list since total group deletion is now permitted."""
+    return []
 
 def execute_deduplication(
     groups: List[DuplicateGroup],
@@ -58,23 +58,23 @@ def execute_deduplication(
 ) -> Tuple[int, int, List[Tuple[str, str]]]:
     """
     Executes deletion of TOSS files across all groups.
+    If all copies of a group are marked to toss, all copies are removed.
+    If at least one copy is marked KEEP, verifies that a KEEP file is intact before deleting.
     Returns (files_deleted, bytes_freed, error_list).
     """
-    validation_errors = validate_safety_invariants(groups)
-    if validation_errors:
-        raise ValueError("; ".join(validation_errors))
-
     deleted_count = 0
     bytes_freed = 0
     errors: List[Tuple[str, str]] = []
 
     for g in groups:
-        # Pre-check: Verify that at least one KEEP file is intact on disk
         keep_files = [e for e in g.entries if e.is_keep]
-        intact_keep = any(os.path.exists(k.path) for k in keep_files)
-        if not intact_keep:
-            errors.append((g.filename, "None of the designated KEEP files exist on disk. Aborting deletion for this group."))
-            continue
+
+        # If user designated at least one file to keep, verify it still exists
+        if keep_files:
+            intact_keep = any(os.path.exists(k.path) for k in keep_files)
+            if not intact_keep:
+                errors.append((g.filename, "None of the designated KEEP files exist on disk. Aborting deletion for this group."))
+                continue
 
         surviving_entries = []
         for e in g.entries:
@@ -82,13 +82,11 @@ def execute_deduplication(
                 surviving_entries.append(e)
             else:
                 if not os.path.exists(e.path):
-                    # Already gone
                     continue
                 try:
                     if use_recycle_bin and sys.platform == "win32":
                         success = _send_to_recycle_bin(e.path)
                         if not success:
-                            # Fallback if shell error occurred
                             os.remove(e.path)
                     else:
                         os.remove(e.path)

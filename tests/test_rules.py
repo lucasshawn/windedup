@@ -5,7 +5,9 @@ from windedup.core.rules import (
     apply_keep_newest,
     apply_keep_oldest,
     apply_keep_shortest_path,
-    apply_prefer_folder
+    apply_prefer_folder,
+    apply_toss_all,
+    apply_keep_all
 )
 
 class TestRules(unittest.TestCase):
@@ -38,6 +40,15 @@ class TestRules(unittest.TestCase):
         self.assertTrue(self.f_new.is_keep)
         self.assertFalse(self.f_mid.is_keep)
         self.assertFalse(self.f_old.is_keep)
+
+    def test_toss_all_and_keep_all(self):
+        apply_toss_all([self.group])
+        self.assertEqual(self.group.toss_count, 3)
+        self.assertEqual(self.group.keep_count, 0)
+
+        apply_keep_all([self.group])
+        self.assertEqual(self.group.keep_count, 3)
+        self.assertEqual(self.group.toss_count, 0)
 
 if __name__ == '__main__':
     unittest.main()
