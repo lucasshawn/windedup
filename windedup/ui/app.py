@@ -126,8 +126,16 @@ class WindedupApp(tk.Tk):
         self.btn_scan.pack(side="left")
 
         # 2. Path & Name Filter Masks (Real-Time)
-        filter_frame = ttk.LabelFrame(self, text=" Path & Name Filters (Semicolon-Separated, Real-Time) ", padding=(14, 8))
+        filter_frame = ttk.LabelFrame(self, text=" Path & Name View Filters (Semicolon-Separated) ", padding=(14, 8))
         filter_frame.pack(fill="x", padx=14, pady=(0, 6))
+
+        lbl_hint = ttk.Label(
+            filter_frame,
+            text="Filter which duplicates appear in the view (e.g. Include: *.png; docs\\* | Exclude: *.tmp; *node_modules*; temp). To protect a folder from deletion, use 'Prefer Folder...' below.",
+            font=("Segoe UI", 8),
+            foreground="#555555"
+        )
+        lbl_hint.pack(anchor="w", pady=(0, 6))
 
         filter_grid = ttk.Frame(filter_frame)
         filter_grid.pack(fill="x")

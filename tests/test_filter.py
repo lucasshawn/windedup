@@ -79,5 +79,33 @@ class TestFilter(unittest.TestCase):
         # Case 3: Empty filters
         self.assertEqual(len(filter_duplicate_groups(groups, [], [])), 2)
 
+    def test_match_single_mask_precision(self):
+        path = r"C:\Users\lucas\Projects\temp\file.txt"
+        # Single letters should NOT match drive or parent folders
+        self.assertFalse(match_single_mask(path, "c"))
+        self.assertFalse(match_single_mask(path, "u"))
+        # Partial substring should not match full folder name
+        self.assertFalse(match_single_mask(path, "proj"))
+        # Whole folder component should match
+        self.assertTrue(match_single_mask(path, "temp"))
+        self.assertTrue(match_single_mask(path, "Projects"))
+
+    def test_filter_promotes_surviving_entry_to_keep_when_keep_file_is_excluded(self):
+        e1 = FileEntry(path=r"C:\Photos\pic1.jpg", size=1000, is_keep=True)
+        e2 = FileEntry(path=r"C:\Backup\pic1.jpg", size=1000, is_keep=False)
+        e3 = FileEntry(path=r"C:\Temp\pic1.jpg", size=1000, is_keep=False)
+        group = DuplicateGroup(group_id="g1", hash="h1", size=1000, entries=[e1, e2, e3])
+
+        # Exclude Photos -> e1 is removed.
+        # e2 and e3 survive, and e2 must be automatically promoted to KEEP so both are not tossed!
+        filtered = filter_duplicate_groups([group], [], ["Photos"])
+        self.assertEqual(len(filtered), 1)
+        entries = filtered[0].entries
+        self.assertEqual(len(entries), 2)
+        # Verify at least one surviving entry is KEEP
+        self.assertTrue(any(e.is_keep for e in entries))
+        self.assertTrue(entries[0].is_keep)
+        self.assertFalse(entries[1].is_keep)
+
 if __name__ == "__main__":
     unittest.main()

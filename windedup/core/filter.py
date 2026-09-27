@@ -14,7 +14,10 @@ def match_single_mask(path: str, mask: str) -> bool:
     Checks if a file path matches a given glob mask.
     Case-insensitive, normalizes Windows and Unix path separators.
     - If mask contains path separators (e.g. 'docs\\*' or 'node_modules/'), matches against full path.
-    - If mask has no path separators (e.g. '*.png' or '*temp*'), matches filename and path components.
+    - If mask contains wildcards (e.g. '*.png' or '*temp*'), matches filename and path using fnmatch.
+    - If mask has no wildcards or separators (e.g. 'temp' or 'cache'):
+      Matches if exact filename == mask, or if mask matches an entire folder component in the path (e.g. '\\temp\\').
+      Does NOT match arbitrary substrings of drive letters or parent folders.
     """
     if not mask or not path:
         return False
@@ -33,13 +36,15 @@ def match_single_mask(path: str, mask: str) -> bool:
         if not pattern.endswith("*"):
             pattern = pattern + "*"
         return fnmatch.fnmatch(norm_path, pattern)
+    elif "*" in norm_mask or "?" in norm_mask:
+        # Wildcard pattern (e.g. *.jpg, *temp*, report_??.doc)
+        return fnmatch.fnmatch(basename, norm_mask) or fnmatch.fnmatch(norm_path, f"*{norm_mask}*")
     else:
-        # Name- or token-level pattern
-        if "*" in norm_mask or "?" in norm_mask:
-            return fnmatch.fnmatch(basename, norm_mask) or fnmatch.fnmatch(norm_path, f"*{norm_mask}*")
-        else:
-            # Substring match on path or exact filename match
-            return (norm_mask == basename) or (norm_mask in norm_path)
+        # Plain token: match exact filename OR exact folder component in path
+        if norm_mask == basename:
+            return True
+        path_components = norm_path.split("\\")
+        return norm_mask in path_components
 
 def filter_file_entry(entry: FileEntry, include_masks: List[str], exclude_masks: List[str]) -> bool:
     """Evaluates whether a FileEntry passes the active include and exclude mask lists."""
@@ -68,7 +73,8 @@ def filter_duplicate_groups(
     """
     Filters all duplicate groups by include and exclude masks.
     Only groups that retain 2 or more files after filtering are returned as duplicate groups.
-    Preserves original entry Keep/Toss designations.
+    If the original KEEP file was excluded from a group, one of the surviving entries is
+    automatically designated as KEEP so that remaining files are not unexpectedly 100% marked to delete.
     """
     if not include_masks and not exclude_masks:
         return groups
@@ -80,6 +86,11 @@ def filter_duplicate_groups(
             if filter_file_entry(e, include_masks, exclude_masks)
         ]
         if len(surviving_entries) >= 2:
+            # Safety check: if no surviving copy is marked to keep,
+            # designate the first surviving copy as KEEP so the group isn't 100% toss!
+            if not any(e.is_keep for e in surviving_entries):
+                surviving_entries[0].is_keep = True
+
             new_group = DuplicateGroup(
                 group_id=g.group_id,
                 hash=g.hash,
