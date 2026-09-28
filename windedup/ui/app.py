@@ -25,6 +25,7 @@ from windedup.core.filter import parse_masks, filter_duplicate_groups
 from windedup.ui.tree_view import DuplicateTreeView, format_size
 from windedup.ui.progress_dialog import ProgressDialog
 from windedup.ui.delete_dialog import DeleteProgressDialog
+from windedup.ui.about_dialog import AboutDialog
 
 class WindedupApp(tk.Tk):
     def report_callback_exception(self, exc, val, tb):
@@ -72,6 +73,9 @@ class WindedupApp(tk.Tk):
             from windedup.ui.crash_dialog import CrashReportDialog
             self.after(200, lambda: CrashReportDialog(self, crash_info))
 
+    def _show_about_dialog(self):
+        AboutDialog(self)
+
     def _set_app_icon(self):
         base_dir = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         ico_path = os.path.join(base_dir, "assets", "icon.ico")
@@ -112,6 +116,15 @@ class WindedupApp(tk.Tk):
                 break
 
     def _build_ui(self):
+        # 0. Top Menu Bar
+        menubar = tk.Menu(self)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="About Windedup...", command=self._show_about_dialog)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.destroy)
+        menubar.add_cascade(label="File", menu=file_menu)
+        self.config(menu=menubar)
+
         # 1. Top Folder Selection Bar
         top_frame = ttk.LabelFrame(self, text=" Target Folder ", padding=(14, 10))
         top_frame.pack(fill="x", padx=14, pady=(12, 6))

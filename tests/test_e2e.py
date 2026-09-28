@@ -1,5 +1,6 @@
 # tests/test_e2e.py
 import unittest
+from unittest.mock import patch
 import tempfile
 import os
 from tests.generate_test_data import create_sample_duplicates
@@ -60,5 +61,37 @@ class TestEndToEnd(unittest.TestCase):
         self.assertEqual(deleted, 5)  # All 5 duplicate files removed
         self.assertTrue(freed > 0)
 
+    def test_file_menu_attached(self):
+        from windedup.ui.app import WindedupApp
+        app = WindedupApp()
+        app.withdraw()
+        try:
+            menu_bar = app.cget("menu")
+            self.assertTrue(menu_bar)
+            # Find the File cascade menu
+            menu_obj = app.nametowidget(menu_bar)
+            file_menu = menu_obj.nametowidget(menu_obj.entrycget(1, "menu"))
+            # Check entry labels
+            labels = [file_menu.entrycget(i, "label") for i in range(file_menu.index("end") + 1) if file_menu.type(i) != "separator"]
+            self.assertIn("About Windedup...", labels)
+            self.assertIn("Exit", labels)
+        finally:
+            app.destroy()
+
+    @patch("windedup.ui.app.AboutDialog")
+    def test_file_menu_about_command(self, mock_about_dialog):
+        from windedup.ui.app import WindedupApp
+        app = WindedupApp()
+        app.withdraw()
+        try:
+            menu_bar = app.cget("menu")
+            menu_obj = app.nametowidget(menu_bar)
+            file_menu = menu_obj.nametowidget(menu_obj.entrycget(1, "menu"))
+            file_menu.invoke(file_menu.index("About Windedup..."))
+            mock_about_dialog.assert_called_once_with(app)
+        finally:
+            app.destroy()
+
 if __name__ == '__main__':
     unittest.main()
+
