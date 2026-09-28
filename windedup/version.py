@@ -5,8 +5,9 @@ Windedup application metadata and build information.
 APP_NAME = "Windedup"
 APP_DESCRIPTION = "Duplicate File Finder & Deduplicator for Windows"
 VERSION = "1.1.0"
-AUTHOR = "Shawn Lucas"
-CONTACT_EMAIL = "lucas_shawn@hotmail.com"
+AUTHOR = "PowerHouse PNW Development"
+CONTACT_NAME = "PowerHouse PNW Development"
+CONTACT_EMAIL = "powerhousepnw@gmail.com"
 
 
 def get_build_timestamp() -> str:

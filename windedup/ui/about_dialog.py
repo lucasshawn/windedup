@@ -9,6 +9,7 @@ from windedup.version import (
     APP_DESCRIPTION,
     VERSION,
     AUTHOR,
+    CONTACT_NAME,
     CONTACT_EMAIL,
     get_build_timestamp,
 )
@@ -82,8 +83,8 @@ class AboutDialog(tk.Toplevel):
         rows = [
             ("Version:", VERSION),
             ("Build Date / Time:", get_build_timestamp()),
-            ("Author:", AUTHOR),
-            ("Contact:", CONTACT_EMAIL),
+            ("Contact Name:", CONTACT_NAME),
+            ("Contact Email:", CONTACT_EMAIL),
         ]
 
         for i, (label_text, val_text) in enumerate(rows):
@@ -95,11 +96,12 @@ class AboutDialog(tk.Toplevel):
 
             if label_text == "Version:":
                 self.version_label = val_lbl
-            elif label_text == "Author:":
+            elif label_text in ("Contact Name:", "Author:"):
                 self.author_label = val_lbl
+                self.contact_name_label = val_lbl
             elif label_text == "Build Date / Time:":
                 self.build_time_label = val_lbl
-            elif label_text == "Contact:":
+            elif label_text in ("Contact Email:", "Contact:"):
                 self.email_label = val_lbl
                 val_lbl.configure(foreground="#0066cc", cursor="hand2")
                 val_lbl.bind("<Button-1>", lambda e: self._send_email())

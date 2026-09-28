@@ -32,7 +32,8 @@ class TestCrashReporter(unittest.TestCase):
         self.assertIn("Traceback", info["traceback"])
 
         report = get_crash_report_text(info)
-        self.assertIn("lucas_shawn@hotmail.com", report)
+        self.assertIn("powerhousepnw@gmail.com", report)
+        self.assertIn("PowerHouse PNW Development", report)
         self.assertIn("RuntimeError", report)
 
     def test_clear_crash_marker(self):

@@ -13,7 +13,10 @@ from windedup.core.logger import (
     get_log_file_path
 )
 
-DEVELOPER_EMAIL = "lucas_shawn@hotmail.com"
+from windedup.version import CONTACT_NAME, CONTACT_EMAIL
+
+DEVELOPER_EMAIL = CONTACT_EMAIL
+DEVELOPER_NAME = CONTACT_NAME
 
 class CrashReportDialog(tk.Toplevel):
     def __init__(self, parent: tk.Tk, crash_info: Dict[str, Any]):

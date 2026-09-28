@@ -106,7 +106,7 @@ def get_crash_report_text(crash_info: Dict[str, Any]) -> str:
     """Formats full crash diagnostics for developer submission or clipboard."""
     return (
         f"Windedup Crash Report\n"
-        f"Developer: lucas_shawn@hotmail.com\n"
+        f"Contact: PowerHouse PNW Development <powerhousepnw@gmail.com>\n"
         f"--------------------------------------------------\n"
         f"Timestamp:      {crash_info.get('timestamp', 'Unknown')}\n"
         f"Context:        {crash_info.get('context', 'Unknown')}\n"

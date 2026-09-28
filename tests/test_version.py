@@ -9,8 +9,9 @@ class TestVersionMetadata(unittest.TestCase):
     def test_metadata_constants(self):
         self.assertEqual(ver.APP_NAME, "Windedup")
         self.assertEqual(ver.VERSION, "1.1.0")
-        self.assertEqual(ver.AUTHOR, "Shawn Lucas")
-        self.assertEqual(ver.CONTACT_EMAIL, "lucas_shawn@hotmail.com")
+        self.assertEqual(ver.AUTHOR, "PowerHouse PNW Development")
+        self.assertEqual(ver.CONTACT_NAME, "PowerHouse PNW Development")
+        self.assertEqual(ver.CONTACT_EMAIL, "powerhousepnw@gmail.com")
         self.assertIn("Duplicate File Finder", ver.APP_DESCRIPTION)
 
     def test_get_build_timestamp_fallback(self):

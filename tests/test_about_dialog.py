@@ -19,6 +19,7 @@ class TestAboutDialog(unittest.TestCase):
         dialog = AboutDialog(self.root)
         self.assertEqual(dialog.title(), f"About {ver.APP_NAME}")
         self.assertEqual(dialog.author_label.cget("text"), ver.AUTHOR)
+        self.assertEqual(dialog.contact_name_label.cget("text"), ver.CONTACT_NAME)
         self.assertEqual(dialog.version_label.cget("text"), ver.VERSION)
         self.assertEqual(dialog.build_time_label.cget("text"), ver.get_build_timestamp())
         self.assertEqual(dialog.email_label.cget("text"), ver.CONTACT_EMAIL)
