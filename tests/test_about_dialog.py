@@ -23,6 +23,7 @@ class TestAboutDialog(unittest.TestCase):
         self.assertEqual(dialog.version_label.cget("text"), ver.VERSION)
         self.assertEqual(dialog.build_time_label.cget("text"), ver.get_build_timestamp())
         self.assertEqual(dialog.email_label.cget("text"), ver.CONTACT_EMAIL)
+        self.assertIsNotNone(dialog.banner_label)
 
         # Test copy to clipboard
         dialog._copy_email()

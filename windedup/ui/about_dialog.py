@@ -49,9 +49,25 @@ class AboutDialog(tk.Toplevel):
             except Exception:
                 pass
 
+        self._banner_img = None
+        banner_path = os.path.join(base_dir, "assets", "powerhouse_banner.png")
+        if os.path.exists(banner_path):
+            try:
+                self._banner_img = tk.PhotoImage(file=banner_path)
+            except Exception:
+                pass
+
     def _build_ui(self):
         main_frame = ttk.Frame(self, padding=(24, 20))
         main_frame.pack(fill="both", expand=True)
+
+        # 0. PowerHouse PNW Graphic Banner (Top)
+        self.banner_label = None
+        if self._banner_img:
+            banner_frame = ttk.Frame(main_frame)
+            banner_frame.pack(fill="x", pady=(0, 16))
+            self.banner_label = ttk.Label(banner_frame, image=self._banner_img)
+            self.banner_label.pack(anchor="center")
 
         # Header Frame: Icon + Title + Subtitle
         header_frame = ttk.Frame(main_frame)
@@ -144,7 +160,7 @@ class AboutDialog(tk.Toplevel):
     def _center_window(self, parent: tk.Tk):
         self.update_idletasks()
         w = max(self.winfo_reqwidth(), 440)
-        h = max(self.winfo_reqheight(), 340)
+        h = max(self.winfo_reqheight(), 480)
 
         pw = parent.winfo_width()
         ph = parent.winfo_height()
