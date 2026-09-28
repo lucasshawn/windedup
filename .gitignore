@@ -7,3 +7,4 @@ __pycache__/
 build/
 dist/
 *.spec
+windedup/_build_info.py
