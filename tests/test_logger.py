@@ -7,10 +7,16 @@ from windedup.core.logger import (
     get_log_file_path,
     setup_logging,
     log_and_show_exception,
-    install_root_exception_handlers
+    install_root_exception_handlers,
+    clear_previous_crash
 )
 
 class TestLogger(unittest.TestCase):
+    def setUp(self):
+        clear_previous_crash()
+
+    def tearDown(self):
+        clear_previous_crash()
     def test_log_file_path(self):
         path = get_log_file_path()
         self.assertTrue(path.endswith("windedup.log"))

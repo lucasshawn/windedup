@@ -22,10 +22,13 @@ class CrashReportDialog(tk.Toplevel):
         self.crash_info = crash_info
 
         self.title("Windedup - Previous Crash Detected")
-        self.geometry("720x540")
-        self.minsize(580, 420)
+        self.geometry("740x580")
+        self.minsize(580, 440)
         self.transient(parent)
         self.grab_set()
+
+        # Guarantee marker is cleared from disk as soon as dialog is created
+        clear_previous_crash()
 
         self._build_ui()
         self._center_window()
@@ -50,81 +53,9 @@ class CrashReportDialog(tk.Toplevel):
         main_frame = ttk.Frame(self, padding=(18, 16))
         main_frame.pack(fill="both", expand=True)
 
-        # 1. Header Banner
-        header_frame = ttk.Frame(main_frame)
-        header_frame.pack(fill="x", pady=(0, 12))
-
-        lbl_icon = ttk.Label(header_frame, text="⚠️", font=("Segoe UI", 24))
-        lbl_icon.pack(side="left", padx=(0, 12))
-
-        text_header_frame = ttk.Frame(header_frame)
-        text_header_frame.pack(side="left", fill="x", expand=True)
-
-        lbl_title = ttk.Label(
-            text_header_frame,
-            text="Windedup detected that its previous run crashed",
-            font=("Segoe UI", 12, "bold"),
-            foreground="#C42B1C"
-        )
-        lbl_title.pack(anchor="w")
-
-        timestamp = self.crash_info.get("timestamp", "Unknown time")
-        context = self.crash_info.get("context", "Application Crash")
-        lbl_sub = ttk.Label(
-            text_header_frame,
-            text=f"Crash occurred on {timestamp} in '{context}'. Diagnostic logs were preserved.",
-            font=("Segoe UI", 9)
-        )
-        lbl_sub.pack(anchor="w", pady=(2, 0))
-
-        # 2. Crash Summary Line
-        summary_frame = ttk.LabelFrame(main_frame, text=" Exception Details ", padding=(12, 8))
-        summary_frame.pack(fill="x", pady=(0, 10))
-
-        err_type = self.crash_info.get("error_type", "Exception")
-        err_msg = self.crash_info.get("error_message", "No details")
-        lbl_err = ttk.Label(
-            summary_frame,
-            text=f"{err_type}: {err_msg}",
-            font=("Consolas", 10, "bold"),
-            foreground="#8A1F11",
-            wraplength=660
-        )
-        lbl_err.pack(anchor="w")
-
-        # 3. Traceback Viewer
-        tb_frame = ttk.LabelFrame(main_frame, text=" Full Traceback & Diagnostic Log ", padding=(10, 8))
-        tb_frame.pack(fill="both", expand=True, pady=(0, 12))
-
-        self.txt_traceback = tk.Text(
-            tb_frame,
-            wrap="none",
-            font=("Consolas", 9),
-            background="#F8F9FA",
-            foreground="#212529",
-            padx=8,
-            pady=8,
-            borderwidth=1,
-            relief="solid"
-        )
-        vsb = ttk.Scrollbar(tb_frame, orient="vertical", command=self.txt_traceback.yview)
-        hsb = ttk.Scrollbar(tb_frame, orient="horizontal", command=self.txt_traceback.xview)
-        self.txt_traceback.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
-
-        self.txt_traceback.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        tb_frame.rowconfigure(0, weight=1)
-        tb_frame.columnconfigure(0, weight=1)
-
-        report_content = get_crash_report_text(self.crash_info)
-        self.txt_traceback.insert("1.0", report_content)
-        self.txt_traceback.config(state="disabled")
-
-        # 4. Action Buttons Bar
+        # 1. Action Buttons Bar (Packed at bottom FIRST so it is NEVER cut off)
         btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill="x", pady=(4, 0))
+        btn_frame.pack(side="bottom", fill="x", pady=(10, 0))
 
         btn_email = ttk.Button(
             btn_frame,
@@ -153,6 +84,79 @@ class CrashReportDialog(tk.Toplevel):
             command=self._on_dismiss
         )
         btn_dismiss.pack(side="right")
+
+        # 2. Header Banner
+        header_frame = ttk.Frame(main_frame)
+        header_frame.pack(fill="x", pady=(0, 10))
+
+        lbl_icon = ttk.Label(header_frame, text="⚠️", font=("Segoe UI", 24))
+        lbl_icon.pack(side="left", padx=(0, 12))
+
+        text_header_frame = ttk.Frame(header_frame)
+        text_header_frame.pack(side="left", fill="x", expand=True)
+
+        lbl_title = ttk.Label(
+            text_header_frame,
+            text="Windedup detected that its previous run crashed",
+            font=("Segoe UI", 12, "bold"),
+            foreground="#C42B1C"
+        )
+        lbl_title.pack(anchor="w")
+
+        timestamp = self.crash_info.get("timestamp", "Unknown time")
+        context = self.crash_info.get("context", "Application Crash")
+        lbl_sub = ttk.Label(
+            text_header_frame,
+            text=f"Crash occurred on {timestamp} in '{context}'. Diagnostic logs were preserved.",
+            font=("Segoe UI", 9)
+        )
+        lbl_sub.pack(anchor="w", pady=(2, 0))
+
+        # 3. Crash Summary Line
+        summary_frame = ttk.LabelFrame(main_frame, text=" Exception Details ", padding=(12, 8))
+        summary_frame.pack(fill="x", pady=(0, 10))
+
+        err_type = self.crash_info.get("error_type", "Exception")
+        err_msg = self.crash_info.get("error_message", "No details")
+        lbl_err = ttk.Label(
+            summary_frame,
+            text=f"{err_type}: {err_msg}",
+            font=("Consolas", 10, "bold"),
+            foreground="#8A1F11",
+            wraplength=660
+        )
+        lbl_err.pack(anchor="w")
+
+        # 4. Traceback Viewer (Fills remaining space between summary and buttons)
+        tb_frame = ttk.LabelFrame(main_frame, text=" Full Traceback & Diagnostic Log ", padding=(10, 8))
+        tb_frame.pack(fill="both", expand=True)
+
+        self.txt_traceback = tk.Text(
+            tb_frame,
+            wrap="none",
+            height=10,
+            font=("Consolas", 9),
+            background="#F8F9FA",
+            foreground="#212529",
+            padx=8,
+            pady=8,
+            borderwidth=1,
+            relief="solid"
+        )
+        vsb = ttk.Scrollbar(tb_frame, orient="vertical", command=self.txt_traceback.yview)
+        hsb = ttk.Scrollbar(tb_frame, orient="horizontal", command=self.txt_traceback.xview)
+        self.txt_traceback.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
+
+        self.txt_traceback.grid(row=0, column=0, sticky="nsew")
+        vsb.grid(row=0, column=1, sticky="ns")
+        hsb.grid(row=1, column=0, sticky="ew")
+
+        tb_frame.rowconfigure(0, weight=1)
+        tb_frame.columnconfigure(0, weight=1)
+
+        report_content = get_crash_report_text(self.crash_info)
+        self.txt_traceback.insert("1.0", report_content)
+        self.txt_traceback.config(state="disabled")
 
     def _send_email_report(self):
         """Prepares an email to the developer with the crash diagnostics."""

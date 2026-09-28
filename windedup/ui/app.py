@@ -65,9 +65,9 @@ class WindedupApp(tk.Tk):
         self.displayed_groups = value
 
     def _check_previous_crash(self):
-        """Detects if previous session crashed and displays the reporter dialog."""
-        from windedup.core.logger import has_previous_crash
-        crash_info = has_previous_crash()
+        """Detects if previous session crashed and displays the reporter dialog once."""
+        from windedup.core.logger import consume_previous_crash
+        crash_info = consume_previous_crash()
         if crash_info:
             from windedup.ui.crash_dialog import CrashReportDialog
             self.after(200, lambda: CrashReportDialog(self, crash_info))

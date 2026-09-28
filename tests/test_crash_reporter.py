@@ -64,5 +64,20 @@ class TestCrashReporter(unittest.TestCase):
         self.assertEqual(info["error_type"], "ZeroDivisionError")
         self.assertEqual(info["context"], "Math Operation")
 
+    def test_consume_previous_crash(self):
+        from windedup.core.logger import consume_previous_crash
+        try:
+            raise ValueError("Consume test")
+        except ValueError:
+            exc_type, exc_val, exc_tb = sys.exc_info()
+            write_crash_marker(exc_type, exc_val, exc_tb, context="Consume Context")
+
+        self.assertIsNotNone(has_previous_crash())
+        info = consume_previous_crash()
+        self.assertIsNotNone(info)
+        self.assertEqual(info["error_message"], "Consume test")
+        # Ensure it was cleared from disk
+        self.assertIsNone(has_previous_crash())
+
 if __name__ == "__main__":
     unittest.main()

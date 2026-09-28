@@ -49,6 +49,10 @@ def write_crash_marker(
     context: str = "Unhandled Exception"
 ) -> None:
     """Writes a persistent marker file so next startup can detect and report the crash."""
+    # Do not persist crash markers for unit tests
+    if context.startswith("Unit Test"):
+        return
+
     try:
         marker_path = get_crash_marker_path()
         tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
@@ -89,6 +93,14 @@ def clear_previous_crash() -> None:
             os.remove(marker_path)
     except Exception as e:
         logging.error(f"Failed to remove crash marker file: {e}")
+
+def consume_previous_crash() -> Optional[Dict[str, Any]]:
+    """Reads previous crash marker data and removes the marker from disk immediately.
+    Ensures that a crash notification is only shown once and never haunts the user on future startups."""
+    info = has_previous_crash()
+    if info:
+        clear_previous_crash()
+    return info
 
 def get_crash_report_text(crash_info: Dict[str, Any]) -> str:
     """Formats full crash diagnostics for developer submission or clipboard."""
